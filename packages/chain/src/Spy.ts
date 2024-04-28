@@ -7,7 +7,7 @@ const chars = 'qwertyuiopasdfghjklmnopqrstuvwxyz';
 export class SpyMessage extends Struct({
     agentID: Field,
     message: Provable.Array(Character, 12),
-    securityKey: Field
+    securityKey: Field,
 }) {
     static randomize(
         agentID: Field,
@@ -17,7 +17,7 @@ export class SpyMessage extends Struct({
             agentID: agentID,
             message: [...Array(12)].map(() => {
                 return Character.fromString(
-                    chars[Math.ceil(Math.random() * chars.length)]
+                    chars[Math.floor(Math.random() * chars.length)]
                 )
             }),
             securityKey: securityKey
@@ -28,7 +28,7 @@ export class SpyMessage extends Struct({
 export class SpyStatus extends Struct({
     isActive: Bool,
     lastMsgId: Field,
-    securityKey: Field
+    securityKey: Field,
 }) {}
 
 interface SpyConfig {}
@@ -63,6 +63,10 @@ export class Spy extends RuntimeModule<SpyConfig> {
         assert(
             spyStatus.isActive,
             'Agent not active'
+        )
+        assert(
+            spyStatus.securityKey.lessThan(100),
+            'Invalid security key'
         )
         assert(
             spyStatus.securityKey.equals(msg.securityKey),

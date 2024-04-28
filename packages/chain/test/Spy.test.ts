@@ -43,38 +43,45 @@ describe('Spy', () => {
             id: Field,
             privateKey: PrivateKey,
             publicKey: PublicKey | undefined,
-            securityKey: Field | undefined,
+            securityKey: Field,
         }
 
         const testSpy1: testSpy = {
             id: Field.from(1),
             privateKey: PrivateKey.random(),
             publicKey: undefined,
-            securityKey: undefined
+            securityKey: Field.from(12)
         }
 
         testSpy1.publicKey = testSpy1.privateKey.toPublicKey()
-        testSpy1.securityKey = Field(Math.random() * Number(testSpy1.id.toBigInt()))
+
 
         const testSpy2: testSpy = {
             id: Field.from(2),
             privateKey: PrivateKey.random(),
             publicKey: undefined,
-            securityKey: undefined
+            securityKey: Field.from(24)
         }
 
         testSpy2.publicKey = testSpy2.privateKey.toPublicKey()
-        testSpy2.securityKey = Field(Math.random() * Number(testSpy2.id.toBigInt()))
 
         const testSpy3: testSpy = {
             id: Field.from(3),
             privateKey: PrivateKey.random(),
             publicKey: undefined,
-            securityKey: undefined
+            securityKey: Field.from(55)
         }
 
         testSpy3.publicKey = testSpy3.privateKey.toPublicKey()
-        testSpy3.securityKey = Field(Math.random() * Number(testSpy3.id.toBigInt()))
+
+        const testSpy4: testSpy = {
+            id: Field.from(4),
+            privateKey: PrivateKey.random(),
+            publicKey: undefined,
+            securityKey: Field.from(1212)
+        }
+
+        testSpy4.publicKey = testSpy4.privateKey.toPublicKey()
 
 
         appChain.setSigner(testSpy1.privateKey)
@@ -86,7 +93,7 @@ describe('Spy', () => {
         await tx.send()
         await appChain.produceBlock()
 
-        tx = await appChain.transaction(testSpy2.publicKey, () => {
+        tx = await appChain.transaction(testSpy1.publicKey, () => {
             testSpy2.securityKey && spy.addSpy(testSpy2.id, testSpy2.securityKey)
         })
 
@@ -94,8 +101,16 @@ describe('Spy', () => {
         await tx.send();
         await appChain.produceBlock();
 
-        tx = await appChain.transaction(testSpy3.publicKey, () => {
+        tx = await appChain.transaction(testSpy1.publicKey, () => {
             testSpy3.securityKey && spy.addSpy(testSpy3.id, testSpy3.securityKey)
+        })
+
+        await tx.sign();
+        await tx.send();
+        await appChain.produceBlock();
+
+        tx = await appChain.transaction(testSpy1.publicKey, () => {
+            testSpy4.securityKey && spy.addSpy(testSpy4.id, testSpy4.securityKey)
         })
 
         await tx.sign();
@@ -122,9 +137,14 @@ describe('Spy', () => {
         result = await sendMsg(testSpy1.privateKey, Field(1), falseMsg)
         expect(result.status.toBoolean()).toBeFalsy()
 
+        // Wrong length of securityKey
+        const falseMsg2 = SpyMessage.randomize(testSpy4.id, testSpy4.securityKey)
+        result = await sendMsg(testSpy4.privateKey, Field(1), falseMsg2)
+        expect(result.status.toBoolean()).toBeFalsy()
+
         // No message
-        const falseMsg2 = SpyMessage.randomize(Field(4), Field(5))
-        result = await sendMsg(PrivateKey.random(), Field(1), falseMsg2)
+        const falseMsg3 = SpyMessage.randomize(Field(4), Field(5))
+        result = await sendMsg(PrivateKey.random(), Field(1), falseMsg3)
         expect(result.status.toBoolean()).toBeFalsy()
 
         const spyStatus1 =
@@ -133,9 +153,12 @@ describe('Spy', () => {
             await appChain.query.runtime.Spy.spyStatus.get(testSpy2.id);
         const spyStatus3 =
             await appChain.query.runtime.Spy.spyStatus.get(testSpy3.id);
+        const spyStatus4 =
+            await appChain.query.runtime.Spy.spyStatus.get(testSpy4.id);
 
         expect(spyStatus1?.lastMsgId.equals(Field.from(1))).toBeTruthy();
         expect(spyStatus2?.lastMsgId.equals(Field.from(1))).toBeTruthy();
         expect(spyStatus3?.lastMsgId.equals(Field.from(1))).toBeTruthy();
+        expect(spyStatus4?.lastMsgId.equals(Field.from(1))).toBeTruthy();
     }, 1_000_000);
 })
