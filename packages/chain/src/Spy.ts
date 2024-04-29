@@ -1,4 +1,4 @@
-import {Bool, Character, Field, Provable, Struct} from "o1js";
+import {Bool, Character, Experimental, Field, Provable, PublicKey, Struct, UInt64} from "o1js";
 import {runtimeMethod, RuntimeModule, runtimeModule, state} from "@proto-kit/module";
 import {assert, StateMap} from "@proto-kit/protocol";
 
@@ -31,6 +31,44 @@ export class SpyStatus extends Struct({
     securityKey: Field,
 }) {}
 
+export class SpyInfoExtension extends Struct({
+    blockHeight: UInt64,
+    sender: PublicKey,
+    senderNonce: UInt64,
+}) {}
+
+export class SpyMessageProofPublicInput extends Struct({
+    securityKey: Field,
+}) {}
+
+export class SpyMessageProofPublicOutput extends Struct({}) {}
+
+export const proveZkMessage = (
+    publicInput: SpyMessageProofPublicInput,
+    message: SpyMessage
+): SpyMessageProofPublicOutput => {
+
+    publicInput.securityKey.assertGreaterThan(10)
+    publicInput.securityKey.assertLessThan(100)
+    publicInput.securityKey.assertEquals(message.securityKey)
+
+    return new SpyMessageProofPublicOutput({});
+};
+
+export const MessageZkProof = Experimental.ZkProgram({
+    publicInput: SpyMessageProofPublicInput,
+    publicOutput: SpyMessageProofPublicOutput,
+    methods: {
+        proveMessage: {
+            privateInputs: [SpyMessage],
+            method: proveZkMessage,
+        },
+    },
+});
+
+export class MessageProof extends Experimental.ZkProgram.Proof(MessageZkProof) {}
+
+
 interface SpyConfig {}
 
 @runtimeModule()
@@ -58,27 +96,47 @@ export class Spy extends RuntimeModule<SpyConfig> {
     }
 
     @runtimeMethod()
-    public sendMessage(msgId: Field, msg: SpyMessage) {
-        let spyStatus = this.spyStatus.get(msg.agentID).value;
+    public sendMessage(msgId: Field, agentId: Field,  messageProof: MessageProof) {
+        let spyStatus = this.spyStatus.get(agentId).value;
+
         assert(
             spyStatus.isActive,
             'Agent not active'
-        )
-        assert(
-            spyStatus.securityKey.lessThan(100),
-            'Invalid security key'
-        )
-        assert(
-            spyStatus.securityKey.equals(msg.securityKey),
-            'Security key does not match'
         )
         assert(
             msgId.greaterThan(spyStatus.lastMsgId),
             'Message lifetime limit exceeded'
         )
 
+        messageProof.verify()
+
         spyStatus.lastMsgId = msgId
-        this.spyStatus.set(msg.agentID, spyStatus)
+        this.spyStatus.set(agentId, spyStatus)
+    }
+}
+
+@runtimeModule()
+export class SpyExtended extends Spy {
+    @state() public additionalInfo = StateMap.from<Field, SpyInfoExtension>(
+        Field,
+        SpyInfoExtension
+    );
+
+    @runtimeMethod()
+    public override sendMessage(
+        agentId: Field,
+        messageId: Field,
+        messageProof: MessageProof
+    ) {
+        super.sendMessage(agentId, messageId, messageProof);
+
+        let addInfo = this.additionalInfo.get(agentId).value;
+
+        addInfo.blockHeight = this.network.block.height;
+        addInfo.senderNonce = addInfo.senderNonce.add(1);
+        addInfo.sender = this.transaction.sender.value;
+
+        this.additionalInfo.set(agentId, addInfo);
     }
 }
 
